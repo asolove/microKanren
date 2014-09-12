@@ -1,6 +1,8 @@
 ;; Jason Hemann and Dan Friedman
 ;; microKanren, final implementation from paper
 
+;; Modified by Adam Solove to support tracing
+
 (define (var c) (vector c))
 (define (var? x) (vector? x))
 (define (var=? x1 x2) (= (vector-ref x1 0) (vector-ref x2 0)))
@@ -12,11 +14,11 @@
 (define (ext-s x v s) `((,x . ,v) . ,s))
 
 (define (== u v)
-  (lambda (s/c)
-    (let ((s (unify u v (car s/c))))
-      (if s (unit `(,s . ,(cdr s/c))) mzero))))
+  (lambda (s/t)
+    (let ((s (unify u v (car s/t))))
+      (if s (unit `(,s . ,(cdr s/t))) mzero))))
 
-(define (unit s/c) (cons s/c mzero))
+(define (unit s/t) (cons s/t mzero))
 (define mzero '())
 
 (define (unify u v s)
@@ -31,12 +33,13 @@
       (else (and (eqv? u v) s)))))
 
 (define (call/fresh f)
-  (lambda (s/c)
-    (let ((c (cdr s/c)))
-      ((f (var c)) `(,(car s/c) . ,(+ c 1))))))
+  (lambda (s/t)
+    (let* ((t (cdr s/t))
+           (c (car t)))
+      ((f (var c)) `(,(car s/t) . ,(cons (+ c 1) (cdr t)))))))
 
-(define (disj g1 g2) (lambda (s/c) (mplus (g1 s/c) (g2 s/c))))
-(define (conj g1 g2) (lambda (s/c) (bind (g1 s/c) g2)))
+(define (disj g1 g2) (lambda (s/t) (mplus (g1 s/t) (g2 s/t))))
+(define (conj g1 g2) (lambda (s/t) (bind (g1 s/t) g2)))
 
 (define (mplus $1 $2)
   (cond
@@ -54,7 +57,7 @@
 
 (define-syntax Zzz
   (syntax-rules ()
-    ((_ g) (lambda (s/c) (lambda () (g s/c))))))
+    ((_ g) (lambda (s/t) (lambda () (g s/t))))))
 
 (define-syntax conj+
   (syntax-rules ()
@@ -88,7 +91,7 @@
     ((_ (x ...) g0 g ...)
      (map reify-1st (take-all (call/goal (fresh (x ...) g0 g ...)))))))
 
-(define empty-state '(() . 0))
+(define empty-state '(() . (0)))
 
 (define (call/goal g) (g empty-state))
 
@@ -104,8 +107,8 @@
     (let (($ (pull $)))
       (if (null? $) '() (cons (car $) (take (- n 1) (cdr $)))))))
 
-(define (reify-1st s/c)
-  (let ((v (walk* (var 0) (car s/c))))
+(define (reify-1st s/t)
+  (let ((v (walk* (var 0) (car s/t))))
     (walk* v (reify-s v '()))))
 
 (define (walk* v s)
@@ -140,6 +143,28 @@
                      (app-f/v* (- n 1) (cons x v*)))))))))
      (app-f/v* n '())))
 
+;;; Trace
+
+(define-syntax trace
+  (syntax-rules ()
+    ((_ g)
+     (lambda (s/t)
+      (trace-stream (quote g) s/t (g s/t))))))
+
+(define (trace-stream form s/t r)
+  (cond
+    ((null? r) r)
+    ((procedure? r)
+      (lambda () (trace-stream form s/t (r))))
+    (else
+      (let* ((s/t2 (car r))
+             (thunk (cdr r))
+             (s/t3 (cons (car s/t2)
+                         (cons (car (cdr s/t2))
+                               (cons (list (car s/t) (car s/t2) form)
+                                     (cdr (cdr s/t2)))))))
+        (cons s/t3 (trace-stream form s/t thunk))))))
+
 ;;; Test programs
 
 (define-syntax test-check
@@ -158,9 +183,9 @@
   (conde
     ((== '() l) (== s out))
     ((fresh (a d res)
-       (== `(,a . ,d) l)
-       (== `(,a . ,res) out)
-       (appendo d s res)))))
+       (trace (== `(,a . ,d) l))
+       (trace (== `(,a . ,res) out))
+       (trace (appendo d s res))))))
 
 (test-check 'run*
   (run* (q) (fresh (x y) (== `(,x ,y) q) (appendo x y '(1 2 3 4 5))))
@@ -237,6 +262,36 @@
       (1 (2 8 3 4) 5 8 8 8 8)
       (1 (2 8 3 4) 5 8 8 8 8 8)))
 
+;;; Example debug output
 
+(define-syntax debug
+  (syntax-rules ()
+    ((_ n (x ...) g0 g ...)
+     (map reify-1st (take n (call/goal (fresh (x ...) g0 g ...)))))))
 
+(define appendo-output
+  (take 8
+    (call/goal
+      (fresh (q)
+        (fresh (x y)
+          (== `(,x ,y) q)
+          (appendo x y '(1 2)))))))
 
+(define (debug-answer answer)
+  (display "Found answer ")
+  (display (reify-1st answer))
+  (display " by passing through ")
+  (map (lambda (frame)
+    (let ((in (car frame))
+          (out (cadr frame))
+          (form (caddr frame)))
+      (display "\n\t")
+      (display form)
+      (display ": ")
+      (display (reify-1st frame))
+      (display " => ")
+      (display (reify-1st (cons out '())))))
+    (cddr answer))
+  (display "\n"))
+
+(map debug-answer appendo-output)
