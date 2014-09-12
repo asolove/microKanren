@@ -143,6 +143,25 @@
                      (app-f/v* (- n 1) (cons x v*)))))))))
      (app-f/v* n '())))
 
+;;; Trace
+
+(define (trace g)
+  (lambda (s/t)
+    (trace-stream s/t (g s/t))))
+
+(define (trace-stream s/t r)
+  (cond
+    ((null? r) r)
+    ((procedure? r)
+      (lambda () (trace-stream s/t (r))))
+    (else
+      (let* ((s/t2 (car r))
+             (thunk (cdr r))
+             (s/t3 (cons (car s/t2)
+                         (cons (car (cdr s/t2))
+                               (cons (car s/t) (cdr (cdr s/t2)))))))
+        (cons s/t3 thunk)))))
+
 ;;; Test programs
 
 (define-syntax test-check
@@ -163,7 +182,7 @@
     ((fresh (a d res)
        (== `(,a . ,d) l)
        (== `(,a . ,res) out)
-       (appendo d s res)))))
+       (trace (appendo d s res))))))
 
 (test-check 'run*
   (run* (q) (fresh (x y) (== `(,x ,y) q) (appendo x y '(1 2 3 4 5))))
@@ -240,6 +259,26 @@
       (1 (2 8 3 4) 5 8 8 8 8)
       (1 (2 8 3 4) 5 8 8 8 8 8)))
 
+;;; Example debug output
 
+(define-syntax debug
+  (syntax-rules ()
+    ((_ n (x ...) g0 g ...)
+     (map reify-1st (take n (call/goal (fresh (x ...) g0 g ...)))))))
 
+(define appendo-output
+  (take 8
+    (call/goal
+      (fresh (q)
+        (fresh (x y)
+          (== `(,x ,y) q)
+          (appendo x y '(1 2)))))))
 
+(define (debug-answer answer)
+  (display "Found answer ")
+  (display (reify-1st answer))
+  (display " by passing through ")
+  (display (map (lambda (frame) (reify-1st (cons frame '()))) (cddr answer)))
+  (display "\n"))
+
+(map debug-answer appendo-output)
