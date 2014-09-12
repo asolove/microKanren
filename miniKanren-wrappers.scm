@@ -160,7 +160,7 @@
              (s/t3 (cons (car s/t2)
                          (cons (car (cdr s/t2))
                                (cons (cons (car s/t) (car s/t2)) (cdr (cdr s/t2)))))))
-        (cons s/t3 thunk)))))
+        (cons s/t3 (trace-stream s/t thunk))))))
 
 ;;; Test programs
 
