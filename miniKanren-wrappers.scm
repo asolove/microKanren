@@ -159,7 +159,7 @@
              (thunk (cdr r))
              (s/t3 (cons (car s/t2)
                          (cons (car (cdr s/t2))
-                               (cons (car s/t) (cdr (cdr s/t2)))))))
+                               (cons (cons (car s/t) (car s/t2)) (cdr (cdr s/t2)))))))
         (cons s/t3 thunk)))))
 
 ;;; Test programs
@@ -180,8 +180,8 @@
   (conde
     ((== '() l) (== s out))
     ((fresh (a d res)
-       (== `(,a . ,d) l)
-       (== `(,a . ,res) out)
+       (trace (== `(,a . ,d) l))
+       (trace (== `(,a . ,res) out))
        (trace (appendo d s res))))))
 
 (test-check 'run*
@@ -278,7 +278,13 @@
   (display "Found answer ")
   (display (reify-1st answer))
   (display " by passing through ")
-  (display (map (lambda (frame) (reify-1st (cons frame '()))) (cddr answer)))
+  (map (lambda (frame)
+    (let ((out (cdr frame)))
+      (display "\n\t")
+      (display (reify-1st frame))
+      (display " => ")
+      (display (reify-1st (cons out '())))))
+    (cddr answer))
   (display "\n"))
 
 (map debug-answer appendo-output)
