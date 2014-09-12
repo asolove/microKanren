@@ -145,22 +145,25 @@
 
 ;;; Trace
 
-(define (trace g)
-  (lambda (s/t)
-    (trace-stream s/t (g s/t))))
+(define-syntax trace
+  (syntax-rules ()
+    ((_ g)
+     (lambda (s/t)
+      (trace-stream (quote g) s/t (g s/t))))))
 
-(define (trace-stream s/t r)
+(define (trace-stream form s/t r)
   (cond
     ((null? r) r)
     ((procedure? r)
-      (lambda () (trace-stream s/t (r))))
+      (lambda () (trace-stream form s/t (r))))
     (else
       (let* ((s/t2 (car r))
              (thunk (cdr r))
              (s/t3 (cons (car s/t2)
                          (cons (car (cdr s/t2))
-                               (cons (cons (car s/t) (car s/t2)) (cdr (cdr s/t2)))))))
-        (cons s/t3 (trace-stream s/t thunk))))))
+                               (cons (list (car s/t) (car s/t2) form)
+                                     (cdr (cdr s/t2)))))))
+        (cons s/t3 (trace-stream form s/t thunk))))))
 
 ;;; Test programs
 
@@ -279,8 +282,12 @@
   (display (reify-1st answer))
   (display " by passing through ")
   (map (lambda (frame)
-    (let ((out (cdr frame)))
+    (let ((in (car frame))
+          (out (cadr frame))
+          (form (caddr frame)))
       (display "\n\t")
+      (display form)
+      (display ": ")
       (display (reify-1st frame))
       (display " => ")
       (display (reify-1st (cons out '())))))
