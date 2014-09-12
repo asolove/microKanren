@@ -34,8 +34,9 @@
 
 (define (call/fresh f)
   (lambda (s/t)
-    (let ((c (cdr s/t)))
-      ((f (var c)) `(,(car s/t) . ,(+ c 1))))))
+    (let* ((t (cdr s/t))
+           (c (car t)))
+      ((f (var c)) `(,(car s/t) . ,(cons (+ c 1) (cdr t)))))))
 
 (define (disj g1 g2) (lambda (s/t) (mplus (g1 s/t) (g2 s/t))))
 (define (conj g1 g2) (lambda (s/t) (bind (g1 s/t) g2)))
@@ -90,7 +91,7 @@
     ((_ (x ...) g0 g ...)
      (map reify-1st (take-all (call/goal (fresh (x ...) g0 g ...)))))))
 
-(define empty-state '(() . 0))
+(define empty-state '(() . (0)))
 
 (define (call/goal g) (g empty-state))
 
