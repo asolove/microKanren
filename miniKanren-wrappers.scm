@@ -1,6 +1,8 @@
 ;; Jason Hemann and Dan Friedman
 ;; microKanren, final implementation from paper
 
+;; Modified by Adam Solove to support tracing
+
 (define (var c) (vector c))
 (define (var? x) (vector? x))
 (define (var=? x1 x2) (= (vector-ref x1 0) (vector-ref x2 0)))
@@ -12,11 +14,11 @@
 (define (ext-s x v s) `((,x . ,v) . ,s))
 
 (define (== u v)
-  (lambda (s/c)
-    (let ((s (unify u v (car s/c))))
-      (if s (unit `(,s . ,(cdr s/c))) mzero))))
+  (lambda (s/t)
+    (let ((s (unify u v (car s/t))))
+      (if s (unit `(,s . ,(cdr s/t))) mzero))))
 
-(define (unit s/c) (cons s/c mzero))
+(define (unit s/t) (cons s/t mzero))
 (define mzero '())
 
 (define (unify u v s)
@@ -31,12 +33,12 @@
       (else (and (eqv? u v) s)))))
 
 (define (call/fresh f)
-  (lambda (s/c)
-    (let ((c (cdr s/c)))
-      ((f (var c)) `(,(car s/c) . ,(+ c 1))))))
+  (lambda (s/t)
+    (let ((c (cdr s/t)))
+      ((f (var c)) `(,(car s/t) . ,(+ c 1))))))
 
-(define (disj g1 g2) (lambda (s/c) (mplus (g1 s/c) (g2 s/c))))
-(define (conj g1 g2) (lambda (s/c) (bind (g1 s/c) g2)))
+(define (disj g1 g2) (lambda (s/t) (mplus (g1 s/t) (g2 s/t))))
+(define (conj g1 g2) (lambda (s/t) (bind (g1 s/t) g2)))
 
 (define (mplus $1 $2)
   (cond
@@ -54,7 +56,7 @@
 
 (define-syntax Zzz
   (syntax-rules ()
-    ((_ g) (lambda (s/c) (lambda () (g s/c))))))
+    ((_ g) (lambda (s/t) (lambda () (g s/t))))))
 
 (define-syntax conj+
   (syntax-rules ()
@@ -104,8 +106,8 @@
     (let (($ (pull $)))
       (if (null? $) '() (cons (car $) (take (- n 1) (cdr $)))))))
 
-(define (reify-1st s/c)
-  (let ((v (walk* (var 0) (car s/c))))
+(define (reify-1st s/t)
+  (let ((v (walk* (var 0) (car s/t))))
     (walk* v (reify-s v '()))))
 
 (define (walk* v s)
